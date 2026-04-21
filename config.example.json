@@ -1,0 +1,18 @@
+{
+  "PRINTER_IP": "192.168.0.100",
+  "ACCESS_CODE": "replace-with-bambu-access-code",
+  "SERIAL_NO": "replace-with-bambu-serial-number",
+  "SUPABASE_URL": "https://your-project-ref.supabase.co",
+  "SUPABASE_KEY": "replace-with-supabase-anon-or-service-key",
+  "SUPABASE_CAPTURE_BUCKET": "inspection-captures",
+  "CAMERA_LENS_POSITION": 4.9,
+  "SIDE3_SCALE_MM_PER_PIXEL": 0.1025,
+  "SIDE3_GAGEBOX_WIDTH_MM": 35.0,
+  "SIDE3_GAGEBOX_LENGTH_MM": 75.0,
+  "SIDE3_GAGEBOX_HEIGHT_MM": 9.0,
+  "SIDE3_PART_HEIGHT_MM": 25.0,
+  "SIDE3_CAMERA_HEIGHT_MM": 300.0,
+  "LINE_TARGET_USER_ID": "replace-with-line-user-id",
+  "LINE_CHANNEL_ACCESS_TOKEN": "replace-with-line-channel-access-token",
+  "LINE_CHANNEL_SECRET": "replace-with-line-channel-secret"
+}

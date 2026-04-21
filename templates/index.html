@@ -1,0 +1,2372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INSPECTION SYSTEM</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+        :root {
+            --bg-deep: #020617;
+            --bg-card: #0f172a;
+            --bg-elevated: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: rgba(255, 255, 255, 0.08);
+            --radius-xl: 20px;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --box-gap: 12px;
+            --font: 'Inter', system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font); background-color: var(--bg-deep); color: var(--text-primary); overflow: hidden; height: 100vh; width: 100vw; }
+
+        /* --- Layout --- */
+        .app-container { display: grid; grid-template-columns: 1fr 440px; height: 100vh; }
+
+        /* --- Main Feed --- */
+        main { position: relative; background: #000; overflow: hidden; }
+        .video-wrapper { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        .video-wrapper img { width: 100%; height: 100%; object-fit: contain; transition: opacity 0.6s ease; }
+
+        .system-off-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 5; transition: all 0.6s ease; opacity: 0; }
+        .system-off-screen.visible { display: flex; opacity: 1; }
+        .off-text { font-size: 2.2rem; font-weight: 200; letter-spacing: 0.4em; color: rgba(255,255,255,0.3); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .off-subtext { font-size: 0.7rem; color: var(--text-secondary); letter-spacing: 0.15em; opacity: 0.5; font-weight: 400; }
+        .off-indicator { width: 40px; height: 1px; background: rgba(255,255,255,0.1); margin-top: 2rem; }
+
+        .overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 2rem; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
+        .overlay-top { display: flex; justify-content: space-between; align-items: center; }
+        .overlay-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+
+        .glass-pill { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid var(--border); padding: 0.6rem 1.2rem; border-radius: 999px; display: flex; align-items: center; gap: 0.75rem; }
+        .status-indicator { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+        .status-indicator.active { background: var(--success); box-shadow: 0 0 15px var(--success); }
+
+        /* --- Sidebar --- */
+        aside { background: var(--bg-card); border-left: 1px solid var(--border); padding: 1.5rem; display: flex; flex-direction: column; gap: 0; overflow-y: auto; }
+        aside > * { margin-bottom: var(--box-gap) !important; }
+        aside > *:last-child { margin-bottom: 0 !important; }
+        aside > div { display: flex; flex-direction: column; gap: var(--box-gap); }
+
+        .section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+        .section-title { font-size: 0.75rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; }
+        .section-title i { width: 4px; height: 12px; background: var(--accent); border-radius: 2px; }
+        .workflow-shortcut {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            flex: 0 0 42px;
+            padding: 0;
+            border-radius: 12px;
+            border: 1px solid rgba(129, 140, 248, 0.24);
+            background: linear-gradient(180deg, rgba(99, 102, 241, 0.18), rgba(79, 70, 229, 0.14));
+            color: #eef2ff;
+            text-decoration: none;
+            transition: transform 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
+        }
+        .workflow-shortcut:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.08);
+            border-color: rgba(129, 140, 248, 0.42);
+        }
+        .workflow-shortcut img {
+            width: 22px;
+            height: 22px;
+            display: block;
+        }
+
+        .card { background: var(--bg-elevated); border-radius: var(--radius-lg); border: 1px solid var(--border); padding: 1.25rem; position: relative; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card > * { margin-bottom: var(--box-gap) !important; }
+        .card > *:last-child { margin-bottom: 0 !important; }
+        .mode-card { padding: 0.55rem 0.7rem; }
+        
+        /* Workflow Stepper */
+        .step-list { display: flex; flex-direction: column; gap: var(--box-gap); }
+        .step-item { display: flex; align-items: center; gap: 0.8rem; padding: 0.75rem 0.85rem; border-radius: var(--radius-md); border: 1px solid transparent; background: rgba(255,255,255,0.03); transition: all 0.3s; }
+        .step-item.active { background: rgba(99, 102, 241, 0.1); border-color: var(--accent); box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15); }
+        .step-item.complete { background: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.2); }
+        .step-item.error { background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.2); }
+
+        .step-number { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 0.72rem; background: var(--bg-deep); border: 2px solid var(--border); }
+        .step-item.active .step-number { border-color: var(--accent); color: var(--accent); animation: pulse 2s infinite; }
+        .step-item.complete .step-number { background: var(--success); border-color: var(--success); color: white; }
+        .step-item.error .step-number { background: var(--danger); border-color: var(--danger); color: white; }
+
+        .step-info { flex: 1; }
+        .step-name { font-weight: 700; font-size: 0.77rem; }
+        .step-status { font-size: 0.64rem; color: var(--text-secondary); margin-top: 2px; }
+        .step-name-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+        /* Buttons */
+        .btn { border: none; cursor: pointer; border-radius: var(--radius-md); font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; font-family: inherit; }
+        .btn-primary { background: var(--accent); color: white; width: 100%; padding: 1rem; font-size: 0.9rem; }
+        .btn-ghost { background: var(--bg-deep); border: 1px solid var(--border); color: var(--text-primary); }
+        .btn-manual { background: var(--accent); color: white; padding: 0.42rem 0.78rem; font-size: 0.62rem; }
+        .btn:hover:not(:disabled) { filter: brightness(1.2); transform: translateY(-1px); }
+        .btn:active:not(:disabled) { transform: translateY(0); }
+        .btn:disabled { opacity: 0.2; cursor: not-allowed; }
+
+        .ready-action-row { display: flex; align-items: stretch; gap: 0.5rem; }
+        .ready-action-row .btn-ready { flex: 1; }
+        .btn-ready { background: linear-gradient(135deg, var(--accent), #4f46e5); color: white; border: none; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3); padding: 0.72rem 0.9rem; font-size: 0.76rem; }
+        .btn-ready-stop {
+            width: 44px;
+            min-width: 44px;
+            padding: 0;
+            border-radius: 12px;
+            background: rgba(239, 68, 68, 0.14);
+            border: 1px solid rgba(239, 68, 68, 0.26);
+            color: #fca5a5;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.12);
+            font-size: 1rem;
+            line-height: 1;
+        }
+
+        /* Status Visuals */
+        .timer-display { margin-top: 0; padding: 0.95rem 0.8rem; min-height: 85px; background: var(--bg-deep); border-radius: var(--radius-md); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .timer-val { font-size: 2rem; font-weight: 900; color: var(--warning); line-height: 1; letter-spacing: -1px; }
+        .timer-label { font-size: 0.58rem; text-transform: uppercase; color: var(--text-secondary); font-weight: 700; margin-top: 4px; }
+
+        .ai-result-panel { text-align: center; padding: 0.9rem 1rem; }
+        .ai-label { font-size: 1.72rem; line-height: 1.02; font-weight: 900; color: white; margin-bottom: 0.14rem; }
+        .ai-confidence { font-size: 0.72rem; line-height: 1.08; font-weight: 700; color: var(--accent-light); }
+
+        /* History */
+        .history-container { display: flex; flex-direction: column; gap: var(--box-gap); max-height: 220px; overflow-y: auto; padding-right: 4px; }
+        .history-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius-md); }
+        .history-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: 900; text-transform: uppercase; }
+        .badge-pass { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .badge-fail { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+        /* Tooltip Style */
+        .custom-tooltip { position: relative; display: inline-block; cursor: help; pointer-events: auto !important; }
+        .custom-tooltip .tooltip-content { 
+            visibility: hidden; width: 420px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(12px);
+            color: var(--text-primary); text-align: left; border-radius: var(--radius-md); padding: 1.2rem;
+            position: absolute; z-index: 1000; bottom: 160%; right: 0; opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border); box-shadow: 0 15px 35px rgba(0,0,0,0.8); pointer-events: none;
+            transform: translateY(10px);
+        }
+
+        .custom-tooltip:hover .tooltip-content { visibility: visible; opacity: 1; transform: translateY(0); }
+        .tooltip-header { font-size: 0.7rem; font-weight: 900; color: var(--accent-light); text-transform: uppercase; margin-bottom: 0.6rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; letter-spacing: 0.05em; }
+        .tooltip-row { display: flex; justify-content: space-between; font-size: 0.6rem; margin-bottom: 6px; }
+        .tooltip-label { color: var(--text-secondary); font-weight: 500; }
+        .tooltip-val { font-weight: 800; color: white; }
+
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); } 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); } }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        .mode-selector { display: flex; background: transparent; border-radius: 0; padding: 0; gap: 0.45rem; }
+        .mode-opt { flex: 1; border: none; padding: 6px; border-radius: 6px; font-size: 0.64rem; font-weight: 800; cursor: pointer; transition: 0.2s; background: transparent; color: var(--text-secondary); }
+        .mode-opt.active { background: var(--accent); color: white; }
+
+        .future-measure-card {
+            background: linear-gradient(180deg, rgba(19, 28, 50, 0.98), rgba(22, 33, 58, 0.96));
+            border: 1px solid rgba(255, 196, 84, 0.16);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+            padding: 0.8rem;
+        }
+        .dimension-card-title {
+            font-size: 0.74rem;
+            font-weight: 900;
+            color: rgba(255,255,255,0.92);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin-bottom: 0.7rem;
+        }
+        .dimension-card-title::before {
+            content: "";
+            width: 3px;
+            height: 14px;
+            border-radius: 999px;
+            background: #f59e0b;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+        }
+        .future-measure-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+        .future-measure-title { font-size: 0.76rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
+        .future-measure-action { border: 1px solid rgba(245, 158, 11, 0.24); background: linear-gradient(180deg, rgba(245, 158, 11, 0.16), rgba(217, 119, 6, 0.12)); color: #fde68a; border-radius: 999px; padding: 0.34rem 0.72rem; font-size: 0.52rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: default; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); }
+        .future-measure-action:disabled { opacity: 0.35; cursor: not-allowed; }
+        .measure-calibration {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.28rem;
+            border-radius: 8px;
+            background: rgba(11, 18, 38, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 0.22rem;
+        }
+        .measure-calibration-pair {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+            gap: 0.4rem;
+            align-items: stretch;
+            margin-bottom: 0.35rem;
+        }
+        .measure-calibration-fields { display: flex; flex-direction: column; gap: 0.18rem; min-width: 0; }
+        .measure-calibration-head { display: flex; align-items: center; gap: 0.35rem; }
+        .measure-calibration-label { font-size: 0.42rem; color: var(--text-secondary); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+        .measure-status-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #475569;
+            box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.12);
+            transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+            flex: 0 0 9px;
+        }
+        .measure-status-dot.idle {
+            background: #475569;
+            box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.12);
+        }
+        .measure-status-dot.info {
+            background: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+            transform: scale(1.08);
+        }
+        .measure-status-dot.success {
+            background: #10b981;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+        }
+        .measure-status-dot.warning {
+            background: #f59e0b;
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14);
+        }
+        .measure-status-dot.danger {
+            background: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+        }
+        .measure-calibration-row { display: flex; align-items: center; gap: 0.28rem; width: 100%; }
+        .measure-calibration-row .measure-input { flex: 1; }
+        .measure-calibration-btn { min-width: 100px; cursor: pointer; }
+        .reference-camera-btn {
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
+            padding: 0;
+            border-radius: 6px;
+            background: rgba(7, 12, 28, 0.95);
+            border: 1px solid rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.5);
+        }
+        .reference-camera-btn svg {
+            width: 24px;
+            height: 24px;
+            stroke-width: 1.8;
+        }
+        .focus-control-row { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 0.25rem; width: 100%; align-items: center; }
+        .dataset-card {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 0.95rem;
+            background:
+                radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 34%),
+                linear-gradient(180deg, rgba(20, 30, 54, 0.98), rgba(13, 22, 41, 0.98));
+            border: 1px solid rgba(245, 158, 11, 0.12);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+        .dataset-focus-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+            padding: 0.75rem;
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(11, 18, 38, 0.92), rgba(8, 14, 30, 0.88));
+            border: 1px solid rgba(245, 158, 11, 0.14);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+        .dataset-focus-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+        .dataset-focus-header-main {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            min-width: 0;
+        }
+        .dataset-focus-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 9px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.16));
+            border: 1px solid rgba(245, 158, 11, 0.18);
+            color: #fde68a;
+            flex: 0 0 28px;
+        }
+        .dataset-focus-icon svg {
+            width: 14px;
+            height: 14px;
+            stroke-width: 2;
+        }
+        .dataset-focus-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+            min-width: 0;
+        }
+        .dataset-focus-title {
+            font-size: 0.58rem;
+            color: rgba(255,255,255,0.94);
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .dataset-focus-subtitle {
+            font-size: 0.5rem;
+            color: rgba(148, 163, 184, 0.82);
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .dataset-focus-default {
+            font-size: 0.48rem;
+            color: #fcd34d;
+            font-weight: 900;
+            white-space: nowrap;
+            padding: 0.24rem 0.5rem;
+            border-radius: 999px;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.16);
+        }
+        .dataset-focus-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 0.55rem;
+            align-items: end;
+        }
+        .dataset-focus-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            min-width: 0;
+        }
+        .dataset-focus-status {
+            font-size: 0.48rem;
+            color: rgba(148, 163, 184, 0.9);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .focus-icon-btn {
+            min-width: 36px;
+            width: 36px;
+            height: 34px;
+            padding: 0;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.92rem;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .focus-apply-btn {
+            background: linear-gradient(180deg, rgba(16, 185, 129, 0.96), rgba(5, 150, 105, 0.92));
+            color: #ecfdf5;
+            border: 1px solid rgba(16, 185, 129, 0.28);
+            box-shadow: 0 6px 18px rgba(16, 185, 129, 0.16);
+        }
+        .dataset-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.65rem;
+        }
+        .dataset-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+        .dataset-field-full {
+            grid-column: 1 / -1;
+        }
+        .dataset-label {
+            font-size: 0.54rem;
+            font-weight: 900;
+            color: rgba(226, 232, 240, 0.72);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .dataset-input {
+            width: 100%;
+            min-height: 38px;
+            padding: 0.7rem 0.8rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(2, 6, 23, 0.88);
+            color: white;
+            font-size: 0.76rem;
+            font-weight: 700;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .dataset-input:focus {
+            border-color: rgba(245, 158, 11, 0.34);
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.08);
+        }
+        .dataset-input-mono {
+            font-family: monospace;
+        }
+        .dataset-action-btn {
+            min-height: 44px;
+            justify-content: center;
+            gap: 0.6rem;
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(245, 158, 11, 1), rgba(217, 119, 6, 0.94)) !important;
+            color: #111827 !important;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.05em;
+            box-shadow: 0 12px 28px rgba(217, 119, 6, 0.24);
+        }
+        .dataset-action-btn svg {
+            flex: 0 0 auto;
+        }
+        .dataset-caption {
+            font-size: 0.5rem;
+            color: rgba(148, 163, 184, 0.82);
+            font-weight: 600;
+            line-height: 1.45;
+            margin-top: -0.1rem;
+        }
+        .focus-step-btn {
+            background: rgba(255,255,255,0.04);
+            color: white;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+        }
+        .focus-icon-btn svg { width: 12px; height: 12px; }
+        .measure-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+        .side3-measure-card {
+            padding: 0.95rem;
+            background:
+                radial-gradient(circle at top right, rgba(245, 158, 11, 0.14), transparent 34%),
+                linear-gradient(180deg, rgba(19, 28, 50, 0.99), rgba(14, 22, 41, 0.98));
+        }
+        .side3-measure-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.8rem;
+        }
+        .side3-measure-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 0.16rem;
+            min-width: 0;
+        }
+        .side3-measure-subtitle {
+            font-size: 0.5rem;
+            color: rgba(148, 163, 184, 0.82);
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .side3-measure-badge {
+            padding: 0.28rem 0.56rem;
+            border-radius: 999px;
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            background: rgba(245, 158, 11, 0.12);
+            color: #fde68a;
+            font-size: 0.48rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .side3-measure-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.55rem;
+            margin-bottom: 0.75rem;
+        }
+        .side3-measure-tile {
+            padding: 0.62rem 0.55rem 0.56rem;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: linear-gradient(180deg, rgba(7, 12, 28, 0.95), rgba(10, 18, 39, 0.92));
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            min-width: 0;
+        }
+        .side3-measure-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+        .side3-measure-label {
+            font-size: 0.52rem;
+            color: rgba(226, 232, 240, 0.72);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 900;
+        }
+        .side3-measure-accent {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex: 0 0 9px;
+            box-shadow: 0 0 0 4px rgba(255,255,255,0.03);
+        }
+        .side3-measure-accent.top { background: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16); }
+        .side3-measure-accent.bottom { background: #a855f7; box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.16); }
+        .side3-measure-accent.length { background: #b91c1c; box-shadow: 0 0 0 4px rgba(185, 28, 28, 0.16); }
+        .side3-measure-value {
+            width: 100%;
+            min-height: 44px;
+            padding: 0.45rem 0.42rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.02);
+            color: #fff7ed;
+            font-size: 0.94rem;
+            font-weight: 900;
+            text-align: center;
+            letter-spacing: -0.02em;
+        }
+        .side3-measure-unit {
+            font-size: 0.5rem;
+            color: rgba(148, 163, 184, 0.84);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        .side3-measure-status {
+            padding: 0.7rem 0.8rem;
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(8, 14, 30, 0.94), rgba(11, 18, 38, 0.92));
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+        .side3-calibration-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.55fr) 64px 64px;
+            gap: 0.38rem;
+            align-items: stretch;
+        }
+        .side3-calibration-panel {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 0.22rem;
+            padding: 0.35rem 0.4rem;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+        }
+        .side3-calibration-panel-title {
+            font-size: 0.4rem;
+            color: rgba(148, 163, 184, 0.86);
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .side3-gage-fields {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.24rem;
+        }
+        .side3-gage-input {
+            width: 100%;
+            min-width: 0;
+            min-height: 28px;
+            padding: 0.22rem 0.28rem;
+            border-radius: 7px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(7, 12, 28, 0.9);
+            color: white;
+            font-size: 0.56rem;
+            font-weight: 800;
+            text-align: center;
+            outline: none;
+        }
+        .side3-gage-input::placeholder {
+            color: rgba(148, 163, 184, 0.52);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .side3-gage-unit {
+            font-size: 0.4rem;
+            color: rgba(148, 163, 184, 0.78);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .side3-action-btn {
+            width: 100%;
+            min-height: 44px;
+            height: 44px;
+            border-radius: 10px;
+            font-size: 0.52rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.25rem;
+        }
+        .side3-preview-btn {
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: linear-gradient(180deg, rgba(37, 99, 235, 0.16), rgba(29, 78, 216, 0.12));
+            color: #bfdbfe;
+        }
+        .side3-preview-btn.active {
+            border-color: rgba(16, 185, 129, 0.24);
+            background: linear-gradient(180deg, rgba(16, 185, 129, 0.18), rgba(5, 150, 105, 0.14));
+            color: #d1fae5;
+            box-shadow: 0 10px 22px rgba(16, 185, 129, 0.12);
+        }
+        .side3-calibration-btn {
+            width: 100%;
+            border: 1px solid rgba(245, 158, 11, 0.18);
+            background: linear-gradient(180deg, rgba(245, 158, 11, 0.16), rgba(217, 119, 6, 0.14));
+            color: #fde68a;
+        }
+        .side3-calibration-btn:hover {
+            transform: translateY(-1px);
+            border-color: rgba(245, 158, 11, 0.3);
+            box-shadow: 0 10px 22px rgba(245, 158, 11, 0.12);
+        }
+        .side3-calibration-btn:active {
+            transform: translateY(0);
+        }
+        .side3-action-btn:hover {
+            transform: translateY(-1px);
+        }
+        .side3-action-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2.2;
+        }
+        .side3-gage-compact-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.35rem;
+        }
+        .side3-gage-icon {
+            width: 16px;
+            height: 16px;
+            color: rgba(148, 163, 184, 0.82);
+            flex: 0 0 16px;
+        }
+        @media (max-width: 1400px) {
+            .side3-calibration-grid {
+                grid-template-columns: minmax(0, 1fr) 56px 56px;
+            }
+        }
+        .measure-tile { background: rgba(10, 18, 39, 0.9); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 0.5rem; min-height: 96px; display: flex; flex-direction: column; justify-content: space-between; gap: 0.32rem; }
+        .measure-label { font-size: 0.5rem; color: rgba(173, 186, 215, 0.74); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; }
+        .measure-spec { font-size: 0.9rem; font-weight: 900; color: white; letter-spacing: -0.01em; }
+        .measure-tolerance { font-size: 0.56rem; color: #f59e0b; font-weight: 900; }
+        .measure-footer { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+        .measure-state { font-size: 0.58rem; color: var(--text-secondary); font-weight: 700; }
+        .measure-ready-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.12); }
+        .measure-input {
+            width: 100%;
+            min-height: 16px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.02);
+            color: rgba(255,255,255,0.92);
+            font-size: 0.46rem;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: 0.02em;
+            padding: 0.04rem 0.12rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+        .measure-input::placeholder { color: rgba(148, 163, 184, 0.22); letter-spacing: 0.08em; text-transform: uppercase; }
+        .measure-input:focus { border-color: rgba(245, 158, 11, 0.32); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.08); background: rgba(255,255,255,0.04); }
+        .measure-input:disabled { opacity: 0.45; cursor: not-allowed; }
+        .measure-actions { display: flex; justify-content: space-between; align-items: center; gap: 0.65rem; }
+        .measure-actions-meta { display: flex; flex-direction: column; gap: 0.12rem; }
+        .measure-actions-label { font-size: 0.54rem; color: var(--text-secondary); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+        .measure-actions-status { font-size: 0.6rem; color: var(--text-secondary); font-weight: 700; }
+        .measure-save-btn { min-width: 104px; padding: 0.5rem 0.8rem; font-size: 0.58rem; background: linear-gradient(180deg, rgba(245, 158, 11, 0.96), rgba(217, 119, 6, 0.92)); color: #111827; box-shadow: 0 6px 20px rgba(245, 158, 11, 0.18); }
+        .measure-save-btn:disabled { opacity: 0.3; box-shadow: none; }
+
+        @media (max-width: 1400px) {
+            .measure-calibration-pair { grid-template-columns: 1fr; }
+            .measure-calibration { align-items: stretch; }
+            .measure-calibration-row { flex-direction: column; align-items: stretch; }
+            .measure-calibration-btn { width: 100%; }
+            .measure-grid { grid-template-columns: 1fr; }
+            .measure-actions { flex-direction: column; align-items: stretch; }
+            .measure-save-btn { width: 100%; }
+            .dataset-focus-body,
+            .dataset-form-grid { grid-template-columns: 1fr; }
+        }
+
+        .classification-overlay.visible { display: flex; }
+        .classification-overlay { display: none; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <main>
+            <div class="video-wrapper">
+                <img id="cam_feed" src="{{ url_for('video_feed') }}" alt="Live Feed" crossorigin="anonymous">
+                <img id="cam_feed_ai" src="{{ url_for('video_feed_raw') }}" alt="AI Feed" crossorigin="anonymous" style="display:none;">
+                <canvas id="ai_canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+            </div>
+
+            <div id="system_off_overlay" class="system-off-screen">
+                <div class="off-text">SYSTEM OFF</div>
+                <div class="off-subtext">CAMERA & AI ENGINE ON STANDBY</div>
+                <div class="off-indicator"></div>
+            </div>
+
+            <div id="ai_overlay" class="classification-overlay">
+                <div id="ai_overlay_label" class="class-label">--</div>
+                <div id="ai_overlay_prob" class="class-prob">0%</div>
+            </div>
+
+            <div class="overlay">
+                <div class="overlay-top">
+                    <div class="glass-pill">
+                        <div id="status_dot" class="status-indicator"></div>
+                        <span id="system_status" style="font-weight: 800; font-size: 0.75rem;">SYSTEM READY</span>
+                    </div>
+                    <div class="glass-pill" style="min-width: 180px; justify-content: center;">
+                        <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                            <div id="display_time" style="font-size: 1.1rem; font-weight: 900; color: white; line-height: 1;">00:00:00</div>
+                            <div id="display_date" style="font-size: 0.6rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px;">Monday, 01 Jan 2026</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="overlay-bottom">
+                    <div class="glass-pill">
+                        <span style="color: var(--accent-light); font-weight: 900; font-size: 0.9rem;">PART ID: #<span id="display_part_id">1</span></span>
+                    </div>
+                    
+                    <div class="glass-pill">
+                        <span style="color: var(--text-secondary); font-size: 0.65rem; font-weight: 700;">IP:</span>
+                        <span id="display_server_ip" style="color: var(--success); font-weight: 900; font-size: 0.75rem;">0.0.0.0</span>
+                        <span id="backup_ip_container" style="display: none;">
+                            <span style="color: var(--text-secondary); font-size: 0.65rem; font-weight: 700; margin-left: 8px;">BACKUP:</span>
+                            <span id="display_backup_ip" style="color: var(--accent-light); font-weight: 900; font-size: 0.75rem;">0.0.0.0</span>
+                        </span>
+                        <span style="color: var(--text-secondary); font-size: 0.65rem; font-weight: 700; margin-left: 8px;">MODBUS:</span>
+                        <span id="display_modbus_info" style="color: var(--warning); font-weight: 900; font-size: 0.75rem;">PORT 5020</span>
+                    </div>
+
+                    <div class="glass-pill custom-tooltip">
+                        <span style="color: var(--text-secondary); font-weight: 800; font-size: 0.7rem; letter-spacing: 0.1em; opacity: 0.8;">PROJECT_APE01</span>
+                        <div class="tooltip-content">
+                            <div class="tooltip-header">System Information</div>
+                            <div style="margin-bottom: 12px;">
+                                <div class="tooltip-label" style="margin-bottom: 4px;">PROJECT NAME:</div>
+                                <div class="tooltip-val" style="font-size: 0.78rem; line-height: 1.4; color: var(--accent-light);">DEVELOPMENT OF AN AUTOMATED QUALITY INSPECTION SYSTEM FOR 3D PRINTING PROCESSES</div>
+                            </div>
+                            <div style="margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+                                <div style="flex: 1;">
+                                    <div class="tooltip-label" style="margin-bottom: 6px;">CREATORS:</div>
+                                    <div style="font-size: 0.70rem; color: white; line-height: 1.6; white-space: nowrap;">
+                                        <div>1. 65070507601 KHWANKHAO KEAWDIAU</div>
+                                        <div>2. 65070507626 JIRASAK SOMJIT</div>
+                                        <div>3. 65070507647 TANANART WANGMOON</div>
+                                    </div>
+                                </div>
+                                <div style="height: 70px; display: flex; align-items: center; justify-content: flex-end; overflow: hidden; margin-left: auto;">
+                                    <img id="dept_logo" src="/static/tme-logo.png" style="height: 100%; width: auto; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));">
+                                </div>
+
+                            </div>
+
+                            <div style="margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                                <div class="tooltip-label" style="margin-bottom: 4px;">ADVISOR:</div>
+                                <div class="tooltip-val" style="font-size: 0.70rem; color: var(--warning);">ASST.PROF. NOPPADOL KUMANUVONG</div>
+                            </div>
+                            <div class="tooltip-row"><span class="tooltip-label">Build:</span> <span class="tooltip-val">2026.06.02</span></div>
+                            <div class="tooltip-row" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
+                                <span class="tooltip-label">Status:</span> 
+                                <span class="tooltip-val" style="color: var(--success);">ONLINE</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <aside>
+            <!-- WORKFLOW CONTROL -->
+            <div>
+                <div class="section-title-row">
+                    <div class="section-title"><i></i> OPERATION WORKFLOW</div>
+                    <a
+                        class="workflow-shortcut"
+                        href="https://project-ape65-a1.streamlit.app/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open cloud dashboard"
+                        aria-label="Open Streamlit cloud dashboard"
+                    >
+                        <img
+                            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAOQSURBVHgBxVfNTxNBFP9tm8IKAYtQU8WPJbEF1MiSGDwY1CrBkCACid6M4kUOfCicPIle5CLBxD8ASPQsIcQbSMQDhITVhPChCUsQg4BxlZAADdQ3Q1va7W4pSOvvMrvzZub95r2ZN+8JiBGSJNttNlRCwGX6lQUBErV2v1jz+aAKgELtgNeLt6qqaLGsK+w0IC9PljZ8aKSB90IU7gwfOtYteKpOKCr2QoDvOBlPaMBD/ANofvvkpPIoijwSbNebPvQzHtgfqOsCPEbWsOg7XKdleZ+VM0hJtKbLJct6QZgF4rBzPSIsESTAfJ6UjNE4Kt8msYbCwC0JuoAduAQoZ5CSt3RxcAv4TT+NBIJckcNcwS2wiW1Gu0FR0XmUl5dhL7BtbF1vwe/7X9glHI4stL1oRWpqCpqaH0NVZ7BLaHQWciw2kcJrCKqqbqC+7sGOsxvqa7lyhvq62qhjRTEZHs8llJWVhnbz0G7NynI20k/wfqanp6P1+TNUV1Xgz/IyJiamIhZkZr9eWhL8z8iw89M0NjYeMVYuPIfbt6qRn5+LwcGPWFr6GSrWrJmHnC002RnomZv7jgvkWzahpMQTQYSZvrmpAUlJtjBFZ8+cxtDwCDTtN/+Xck7ifs0dFBYWQDwgUr+Gnp53YXPoQYM1M8vZyqwUKkhPS0Nx8UW/RdLCiFTeLEd29lEYwe12YerLV3JjBa6SyZniAMbHJ42sKQruXNmn72UE+vp6kUatHqura5if/4GVlRUYYWFhEQuLixH9bW2vuBX0sBgtwnY6NDRiJOIHSpJO4PjxY7DZbBHyw4cdfEwopqdnDJUHCBhKOrveIBqYa9zuU9wdeiLHsrPD/hXlk9kymoUSB9VIMkwHapkssRPs9oMRRERRxBHn1rlmOx8d/Ww2nUdCU3odna8RK/REMjMPITUlhZvfFD4oFp8F783kXZ3R3WBGJIeuoMPhoFZCf/8H07EsfwyEYvYQGeZ7Jdc8yMt3Yy+Ynf2G7u5eUzmF4gz+Grpy5Xb6aEQiQUnr1JRSw6+hVUA7EgyWMbOWE5igd5mi0UskCExXIC0LBiLvGlqoURF/qH5dCCPAcjQLJYxxJrGVlIZUTWGhmLvCiqo4keBr62uD/16YRK0N9+N6sgPHfG5WrMZUnFLS2kIr3UXs0Ehxp5eu956LUz14sUr5I024Qml0AXTlOXvUSKlCp2rAuxp7ef4XKHtMSccNHnkAAAAASUVORK5CYII="
+                            alt="Streamlit"
+                        >
+                    </a>
+                </div>
+                
+                <div class="card mode-card">
+                    <div class="mode-selector">
+                        <button id="mode_auto" class="mode-opt active" onclick="setMode('auto')">AUTOMATIC</button>
+                        <button id="mode_manual" class="mode-opt" onclick="setMode('manual')">MANUAL TRIGGER</button>
+                    </div>
+                </div>
+
+                <div class="ready-action-row">
+                    <button id="btn_ready" onclick="setSystemReady()" class="btn btn-primary btn-ready">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+                        SYSTEM READY / NEXT PART
+                    </button>
+                    <button id="btn_ready_cancel" onclick="cancelSystemReady()" class="btn btn-ready-stop" title="Stop System Ready" aria-label="Stop System Ready" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+                    </button>
+                </div>
+
+                <div class="step-list">
+                    <div id="side_1_box" class="step-item">
+                        <div class="step-number">1</div>
+                        <div class="step-info">
+                            <div class="step-name">SIDE 1 INSPECTION</div>
+                            <div id="side_1_status" class="step-status">Pending...</div>
+                        </div>
+                        <button id="btn_side_1" onclick="manualInspect(1)" class="btn btn-manual" disabled>TRIGGER</button>
+                    </div>
+
+                    <div id="side_2_box" class="step-item">
+                        <div class="step-number">2</div>
+                        <div class="step-info">
+                            <div class="step-name">SIDE 2 INSPECTION</div>
+                            <div id="side_2_status" class="step-status">Pending...</div>
+                        </div>
+                        <button id="btn_side_2" onclick="manualInspect(2)" class="btn btn-manual" disabled>TRIGGER</button>
+                    </div>
+
+                    <div id="side_3_box" class="step-item">
+                        <div class="step-number">3</div>
+                        <div class="step-info">
+                            <div class="step-name">SIDE 3 INSPECTION</div>
+                            <div id="side_3_status" class="step-status">Pending...</div>
+                        </div>
+                        <button id="btn_side_3" onclick="manualInspect(3)" class="btn btn-manual" disabled>TRIGGER</button>
+                    </div>
+                </div>
+
+                <div class="card future-measure-card side3-measure-card">
+                    <div class="side3-measure-header">
+                        <div class="side3-measure-copy">
+                            <div class="dimension-card-title" style="margin-bottom: 0;">SIDE 3 MEASUREMENT</div>
+                            <div class="side3-measure-subtitle">OpenCV dimensional verification panel</div>
+                        </div>
+                    </div>
+                    <div class="side3-measure-grid">
+                        <div class="side3-measure-tile">
+                            <div class="side3-measure-top">
+                                <div class="side3-measure-label">Top</div>
+                                <span class="side3-measure-accent top" aria-hidden="true"></span>
+                            </div>
+                            <input id="measure_top" class="side3-measure-value" type="text" value="--" readonly>
+                            <div class="side3-measure-unit">19.50 &plusmn; 0.3 mm</div>
+                        </div>
+                        <div class="side3-measure-tile">
+                            <div class="side3-measure-top">
+                                <div class="side3-measure-label">Bottom</div>
+                                <span class="side3-measure-accent bottom" aria-hidden="true"></span>
+                            </div>
+                            <input id="measure_bottom" class="side3-measure-value" type="text" value="--" readonly>
+                            <div class="side3-measure-unit">24.50 &plusmn; 0.3 mm</div>
+                        </div>
+                        <div class="side3-measure-tile">
+                            <div class="side3-measure-top">
+                                <div class="side3-measure-label">Length</div>
+                                <span class="side3-measure-accent length" aria-hidden="true"></span>
+                            </div>
+                            <input id="measure_length" class="side3-measure-value" type="text" value="--" readonly>
+                            <div class="side3-measure-unit">90.00 &plusmn; 0.3 mm</div>
+                        </div>
+                    </div>
+                    <div class="side3-measure-status">
+                        <div class="side3-calibration-grid">
+                            <div class="side3-calibration-panel">
+                                <div class="side3-gage-compact-head">
+                                    <div class="side3-calibration-panel-title">Gage Box</div>
+                                    <svg class="side3-gage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                        <path d="M4 7.5 12 3l8 4.5M4 7.5V16.5L12 21m-8-13.5 8 4.5m8-4.5V16.5L12 21m0-9v9"/>
+                                    </svg>
+                                </div>
+                                <div class="side3-gage-fields">
+                                    <input id="gage_width_input" class="side3-gage-input" type="number" step="0.01" min="0" placeholder="W" title="Width">
+                                    <input id="gage_length_input" class="side3-gage-input" type="number" step="0.01" min="0" placeholder="L" title="Length">
+                                    <input id="gage_height_input" class="side3-gage-input" type="number" step="0.01" min="0" placeholder="H" title="Height">
+                                </div>
+                                <div class="side3-gage-unit">Millimeter</div>
+                            </div>
+                            <div class="side3-calibration-panel">
+                                <div class="side3-calibration-panel-title">Preview</div>
+                                <button id="side3_preview_btn" type="button" class="side3-action-btn side3-preview-btn" onclick="toggleSide3CalibrationPreview()" title="Toggle measurement preview" aria-label="Toggle measurement preview">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/>
+                                        <circle cx="12" cy="12" r="3"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="side3-calibration-panel">
+                                <div class="side3-calibration-panel-title">Cal</div>
+                                <button type="button" class="side3-action-btn side3-calibration-btn" onclick="triggerSide3Calibration()" title="Capture calibration reference" aria-label="Capture calibration reference">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4l2-2h2l2 2h4a2 2 0 0 1 2 2v4"/>
+                                        <path d="M12 8v8M8 12h8"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timer-display">
+                    <div id="timer_text" class="timer-val">IDLE</div>
+                    <div id="debug_info" class="timer-label">WAITING FOR HANDSHAKE</div>
+                </div>
+            </div>
+
+            <!-- AI SENSOR DATA -->
+            <div>
+                <div class="section-title"><i></i> REAL-TIME AI SENSOR</div>
+                <div class="card ai-result-panel" style="border-bottom: 4px solid var(--accent);">
+                    <div id="ai_label_sidebar" class="ai-label">...</div>
+                    <div id="ai_prob_sidebar" class="ai-confidence">0% CONFIDENCE</div>
+                </div>
+            </div>
+
+            <!-- DATASET ACQUISITION -->
+            <div>
+                <div class="section-title"><i></i> DATASET ACQUISITION</div>
+                <div class="card dataset-card">
+                    <div class="dataset-focus-panel">
+                        <div class="dataset-focus-header">
+                            <div class="dataset-focus-header-main">
+                                <div class="dataset-focus-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M4 7h3l2-2h6l2 2h3"></path>
+                                        <path d="M5 7h14a1 1 0 0 1 1 1v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8a1 1 0 0 1 1-1z"></path>
+                                        <circle cx="12" cy="13" r="3.25"></circle>
+                                    </svg>
+                                </div>
+                                <div class="dataset-focus-copy">
+                                    <div class="dataset-focus-title">Camera Focus</div>
+                                    <div class="dataset-focus-subtitle">Quick lens tuning before capture</div>
+                                </div>
+                            </div>
+                            <div class="dataset-focus-default">Default 6.00</div>
+                        </div>
+                        <div class="dataset-focus-body">
+                            <div class="dataset-focus-field">
+                                <div class="measure-calibration-head">
+                                    <span id="focus_status_dot" class="measure-status-dot idle"></span>
+                                    <span class="measure-calibration-label">Manual Lens Position</span>
+                                </div>
+                                <input id="lens_position_input" class="dataset-input" type="number" step="0.01" min="0" placeholder="Lens position" oninput="setFocusStatus('Manual focus changed.', 'warning')">
+                                <div class="dataset-focus-status">Apply after changing focus value</div>
+                            </div>
+                            <button id="btn_apply_focus" class="btn focus-icon-btn focus-apply-btn" type="button" onclick="saveCameraFocus()">&#10003;</button>
+                        </div>
+                    </div>
+                    <div class="dataset-form-grid">
+                        <div class="dataset-field dataset-field-full">
+                            <label class="dataset-label">Target Folder (in /captures/)</label>
+                            <input type="text" id="burst_folder" value="training_set_1" class="dataset-input dataset-input-mono">
+                        </div>
+                        <div class="dataset-field">
+                            <label class="dataset-label">Image Count</label>
+                            <input type="number" id="burst_count" value="10" min="1" max="500" class="dataset-input">
+                        </div>
+                        <div class="dataset-field">
+                            <label class="dataset-label">Interval (sec)</label>
+                            <input type="number" id="burst_delay" value="0.3" step="0.1" min="0.1" class="dataset-input">
+                        </div>
+                    </div>
+                    <div class="dataset-caption">Capture multiple frames into a named folder for training, calibration, or debugging runs.</div>
+                    <button id="btn_burst_start" onclick="startBurstCapture()" class="btn btn-primary dataset-action-btn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        START BURST CAPTURE
+                    </button>
+                </div>
+            </div>
+
+            <!-- PI SYSTEM MONITOR -->
+            <div>
+                <div class="section-title"><i></i> PI SYSTEM STATUS</div>
+                <div class="card" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; padding: 0.75rem;">
+                    <div style="background: rgba(255,255,255,0.03); padding: 0.4rem; border-radius: 8px;">
+                        <div style="font-size: 0.5rem; color: var(--text-secondary); text-transform: uppercase;">CPU LOAD</div>
+                        <div style="font-size: 0.85rem; font-weight: 800; color: var(--accent-light);"><span id="pi_cpu_usage">0</span>%</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 0.4rem; border-radius: 8px;">
+                        <div style="font-size: 0.5rem; color: var(--text-secondary); text-transform: uppercase;">CPU TEMP</div>
+                        <div style="font-size: 0.85rem; font-weight: 800; color: var(--danger);"><span id="pi_cpu_temp">0</span>°C</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 0.4rem; border-radius: 8px;">
+                        <div style="font-size: 0.5rem; color: var(--text-secondary); text-transform: uppercase;">RAM USAGE</div>
+                        <div style="font-size: 0.85rem; font-weight: 800; color: var(--success);"><span id="pi_ram_usage">0</span>%</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 0.4rem; border-radius: 8px;">
+                        <div style="font-size: 0.5rem; color: var(--text-secondary); text-transform: uppercase;">DISK FREE</div>
+                        <div style="font-size: 0.85rem; font-weight: 800; color: var(--warning);"><span id="pi_disk_usage">0</span>%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3D PRINTER MONITOR -->
+            <div>
+                <div class="section-title"><i></i> 3D PRINTER MONITOR (BAMBU A1)
+                    <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+                        <button onclick="refreshPrinterData()" style="background: transparent; border: none; color: var(--accent); cursor: pointer; font-size: 0.6rem; font-weight: 800;">REFRESH DATA</button>
+                    </div>
+                </div>
+                <div class="card" id="printer_card" style="transition: all 0.5s ease;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <span id="printer_status_badge" class="badge badge-fail">OFFLINE</span>
+                        <div id="printing_indicator" style="display: none; align-items: center; gap: 4px;">
+                            <div style="width: 8px; height: 8px; background: var(--success); border-radius: 50%; animation: pulse 1s infinite;"></div>
+                            <span style="font-size: 0.6rem; font-weight: 800; color: var(--success);">NOW PRINTING</span>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Status Area -->
+                    <div style="background: var(--bg-deep); border-radius: 12px; margin-bottom: 0.75rem; border: 1px solid var(--border); padding: 1rem; display: flex; flex-direction: column; gap: 10px;">
+                        <div>
+                            <div style="font-size: 0.55rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 800; margin-bottom: 4px; letter-spacing: 0.05em;">CURRENT TASK</div>
+                            <div id="printer_task_name" style="font-size: 1rem; font-weight: 900; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Unknown Model</div>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 0.75rem;">
+                            <div>
+                                <div style="font-size: 0.55rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 800; margin-bottom: 4px;">EST. TIME REMAINING</div>
+                                <div id="printer_remaining_time" style="font-size: 1.4rem; font-weight: 900; color: var(--warning); font-family: monospace;">--:--:--</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.55rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 800; margin-bottom: 4px;">CURRENT STAGE</div>
+                                <div id="printer_sub_stage" style="font-size: 0.75rem; font-weight: 800; color: var(--accent-light); padding: 4px 8px; background: rgba(99, 102, 241, 0.1); border-radius: 6px; display: inline-block;">N/A</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
+                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 8px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 0.55rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Nozzle</div>
+                            <div style="font-size: 1rem; font-weight: 900; color: var(--warning);"><span id="nozzle_temp">0</span>°C</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 8px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 0.55rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">Bed</div>
+                            <div style="font-size: 1rem; font-weight: 900; color: var(--accent-light);"><span id="bed_temp">0</span>°C</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.65rem; margin-bottom: 6px; font-weight: 800;">
+                            <span style="color: var(--text-secondary);">PROGRESS</span>
+                            <span id="print_percent" style="color: var(--success);">0%</span>
+                        </div>
+                        <div style="height: 10px; background: rgba(255,255,255,0.05); border-radius: 50px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+                            <div id="print_progress_bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--success), #34d399); transition: width 0.5s; position: relative;">
+                                <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 2s infinite;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-group" style="display: grid; gap: 6px; margin-top: 1rem; opacity: 0.5; transition: opacity 0.3s;">
+                        <input type="text" id="printer_ip_input" placeholder="Printer IP" style="width: 100%; font-size: 0.65rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-deep); color: white;">
+                        <input type="password" id="printer_access_code_input" placeholder="Access Code" style="width: 100%; font-size: 0.65rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-deep); color: white;">
+                        <input type="text" id="printer_serial_no_input" placeholder="Serial No (optional if unchanged)" style="width: 100%; font-size: 0.65rem; padding: 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-deep); color: white;">
+                        <button onclick="savePrinterConfig()" class="btn btn-manual" style="padding: 6px 10px; font-size: 0.6rem;">SAVE 3D CONFIG</button>
+                    </div>
+                    <div id="printer_ip_hint" style="margin-top: 0.45rem; font-size: 0.58rem; line-height: 1.45; color: var(--text-secondary);">
+                        Enter printer IP. If Access Code changed, update it here and save.
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROBOT OMRON MONITOR -->
+            <div>
+                <div class="section-title"><i></i> ROBOT MONITOR (OMRON TM5-700)</div>
+                <div class="card" style="padding: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div id="robot_status_dot" style="width: 10px; height: 10px; border-radius: 50%; background: var(--danger);"></div>
+                        <span style="font-size: 0.75rem; font-weight: 800; color: var(--text-secondary);">MODBUS TCP (5020)</span>
+                    </div>
+                    <span id="robot_status_badge" class="badge badge-fail">DISCONNECTED</span>
+                </div>
+            </div>
+
+            <!-- LOGS -->
+            <div style="flex: 1; display: flex; flex-direction: column;">
+                <div class="section-title"><i></i> INSPECTION HISTORY 
+                    <span id="overall_status" style="margin-left: auto; color: var(--accent);">IDLE</span>
+                </div>
+                <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+                    <div id="history_list" class="history-container"></div>
+                </div>
+            </div>
+
+            <!-- ROBOT MODBUS LOG -->
+            <div style="flex: 0.4; display: flex; flex-direction: column;">
+                <div class="section-title"><i></i> ROBOT SIGNAL LOG</div>
+                <div class="card" style="flex: 1; min-height: 80px; font-family: monospace; font-size: 0.6rem; color: var(--accent-light); padding: 0.5rem;">
+                    <div id="modbus_log_list" style="overflow-y: auto; height: 70px;">
+                        Waiting for signals...
+                    </div>
+                </div>
+            </div>
+
+            <!-- SYSTEM CONTROLS -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                <button class="btn btn-ghost" onclick="forceRestart()" style="grid-column: span 2; font-size: 0.7rem; color: var(--danger);">HARD RESTART SERVER</button>
+                <button id="btn_system" class="btn btn-ghost" onclick="toggleSystem()" style="font-size: 0.7rem;">SYSTEM OFF</button>
+                <button class="btn btn-ghost" onclick="location.reload()" style="font-size: 0.7rem;">REFRESH</button>
+            </div>
+        </aside>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        let systemOn = true;
+        let models = [null, null, null, null]; // Index 1, 2, 3
+        let controlMode = 'auto'; 
+        let isSystemReady = false;
+        const MODEL_BASE_URL = "/static/model/";
+        let latest_ai_label = "---";
+        let latest_ai_prob = 0;
+        let autoPrinterReconnectDone = false;
+        let cameraFocusInFlight = false;
+        let currentDimensions = {
+            top: null,
+            bottom: null,
+            length: null,
+            status: null,
+            message: null,
+        };
+        let side3CalibrationPreviewEnabled = false;
+        const SIDE3_TARGETS = {
+            top: 19.50,
+            bottom: 24.50,
+            length: 90.00,
+        };
+        const SIDE3_TOLERANCE = 0.3;
+
+        function getTmDetectedSide(label) {
+            const upper = String(label || '').toUpperCase();
+            const compact = upper.replace(/[\s_-]+/g, '');
+            if (compact.includes('SIDE1') || compact.endsWith('1')) return 1;
+            if (compact.includes('SIDE2') || compact.endsWith('2')) return 2;
+            if (compact.includes('SIDE3') || compact.endsWith('3')) return 3;
+            if (upper.includes('_1')) return 1;
+            if (upper.includes('_2')) return 2;
+            if (upper.includes('_3')) return 3;
+            return 0;
+        }
+
+        function getTmSideLabel(label) {
+            const side = getTmDetectedSide(label);
+            return side > 0 ? `SIDE_${side}` : 'UNKNOWN';
+        }
+
+        function getTmRealtimeLabel(label) {
+            const upper = String(label || '').toUpperCase().trim();
+            const side = getTmDetectedSide(upper);
+            if (!side) return 'UNKNOWN';
+
+            if (upper.startsWith('GOOD') || upper.startsWith('G ')) return `GOOD_${side}`;
+            if (upper.startsWith('NG')) return `NG_${side}`;
+            return `SIDE_${side}`;
+        }
+
+        function getAggregatedTmSideResult(predictions = []) {
+            const sideScores = new Map();
+            for (const item of predictions) {
+                const side = getTmDetectedSide(item && item.className);
+                if (!side) continue;
+                const probability = Number(item && item.probability) || 0;
+                sideScores.set(side, (sideScores.get(side) || 0) + probability);
+            }
+
+            let bestSide = 0;
+            let bestProbability = 0;
+            let secondBestProbability = 0;
+            for (const [side, probability] of sideScores.entries()) {
+                if (probability > bestProbability) {
+                    secondBestProbability = bestProbability;
+                    bestSide = side;
+                    bestProbability = probability;
+                } else if (probability > secondBestProbability) {
+                    secondBestProbability = probability;
+                }
+            }
+
+            const confidenceMargin = bestProbability - secondBestProbability;
+            if (bestProbability < 0.65 || confidenceMargin < 0.12) {
+                return {
+                    side: 0,
+                    label: 'UNKNOWN',
+                    probability: bestProbability,
+                };
+            }
+
+            return {
+                side: bestSide,
+                label: bestSide > 0 ? `SIDE_${bestSide}` : 'UNKNOWN',
+                probability: bestProbability,
+            };
+        }
+
+        function hasAnyDimensionValue(dimensions = {}) {
+            return [dimensions.top, dimensions.bottom, dimensions.length].some(
+                value => value !== null && value !== undefined
+            );
+        }
+
+        function captureBackgroundReference() {
+            const img = document.getElementById('cam_feed_ai');
+            if (!img || !img.complete || img.naturalHeight === 0) return false;
+            motionCtx.drawImage(img, 0, 0, 64, 64);
+            bgCenterData = motionCtx.getImageData(22, 22, 20, 20).data;
+            return true;
+        }
+
+        function setFocusStatus(message, tone = 'idle') {
+            const dot = document.getElementById('focus_status_dot');
+            if (dot) {
+                dot.className = `measure-status-dot ${tone}`;
+                dot.title = message || 'Camera focus status';
+            }
+        }
+
+        function loadCameraFocusSettings(focus = {}) {
+            const input = document.getElementById('lens_position_input');
+            const button = document.getElementById('btn_apply_focus');
+            if (input && document.activeElement !== input && focus.lens_position !== undefined && focus.lens_position !== null) {
+                input.value = Number(focus.lens_position).toFixed(2);
+            }
+            if (button) {
+                button.disabled = cameraFocusInFlight;
+                button.innerHTML = cameraFocusInFlight ? '...' : '&#10003;';
+                button.style.opacity = cameraFocusInFlight ? '0.45' : '1';
+                button.style.cursor = cameraFocusInFlight ? 'not-allowed' : 'pointer';
+            }
+            if (focus.lens_position !== undefined && focus.lens_position !== null) {
+                setFocusStatus(`Manual focus lens position: ${Number(focus.lens_position).toFixed(2)}`, 'info');
+            }
+        }
+
+        function formatDimensionValue(value) {
+            if (value === undefined || value === null || Number.isNaN(Number(value))) {
+                return '--';
+            }
+            return `${Number(value).toFixed(2)} mm`;
+        }
+
+        function isDimensionInSpec(key, value) {
+            if (value === undefined || value === null || Number.isNaN(Number(value))) return null;
+            const target = SIDE3_TARGETS[key];
+            if (target === undefined || target === null) return null;
+            return Math.abs(Number(value) - Number(target)) <= SIDE3_TOLERANCE;
+        }
+
+        function getGageBoxPayload() {
+            const widthInput = document.getElementById('gage_width_input');
+            const lengthInput = document.getElementById('gage_length_input');
+            const heightInput = document.getElementById('gage_height_input');
+            return {
+                width_mm: widthInput && widthInput.value !== '' ? Number(widthInput.value) : null,
+                length_mm: lengthInput && lengthInput.value !== '' ? Number(lengthInput.value) : null,
+                height_mm: heightInput && heightInput.value !== '' ? Number(heightInput.value) : null,
+            };
+        }
+
+        function updateSide3CalibrationPreviewButton() {
+            const previewBtn = document.getElementById('side3_preview_btn');
+            if (!previewBtn) return;
+            previewBtn.classList.toggle('active', side3CalibrationPreviewEnabled);
+            previewBtn.title = side3CalibrationPreviewEnabled ? 'Measurement preview on' : 'Toggle measurement preview';
+            previewBtn.setAttribute('aria-label', side3CalibrationPreviewEnabled ? 'Measurement preview on' : 'Toggle measurement preview');
+        }
+
+        function updateSide3MeasurementUI(dimensions = {}, options = {}) {
+            const forceClear = options.forceClear === true;
+            const nextDimensions = {
+                top: dimensions.top ?? null,
+                bottom: dimensions.bottom ?? null,
+                length: dimensions.length ?? null,
+                status: dimensions.status ?? null,
+                message: dimensions.message ?? null,
+            };
+            const hasIncomingValues = hasAnyDimensionValue(nextDimensions);
+            const hasCurrentValues = hasAnyDimensionValue(currentDimensions);
+
+            if (!forceClear && !hasIncomingValues && !nextDimensions.status && !nextDimensions.message && hasCurrentValues) {
+                return;
+            }
+
+            currentDimensions = {
+                top: nextDimensions.top,
+                bottom: nextDimensions.bottom,
+                length: nextDimensions.length,
+                status: nextDimensions.status,
+                message: nextDimensions.message,
+            };
+
+            const topInput = document.getElementById('measure_top');
+            const bottomInput = document.getElementById('measure_bottom');
+            const lengthInput = document.getElementById('measure_length');
+            const dot = document.getElementById('measure_status_dot');
+            const statusText = document.getElementById('measure_status_text');
+
+            if (topInput) topInput.value = formatDimensionValue(currentDimensions.top);
+            if (bottomInput) bottomInput.value = formatDimensionValue(currentDimensions.bottom);
+            if (lengthInput) lengthInput.value = formatDimensionValue(currentDimensions.length);
+            if (topInput) topInput.style.color = isDimensionInSpec('top', currentDimensions.top) === false ? '#ef4444' : '#fff7ed';
+            if (bottomInput) bottomInput.style.color = isDimensionInSpec('bottom', currentDimensions.bottom) === false ? '#ef4444' : '#fff7ed';
+            if (lengthInput) lengthInput.style.color = isDimensionInSpec('length', currentDimensions.length) === false ? '#ef4444' : '#fff7ed';
+
+            let tone = 'idle';
+            if (currentDimensions.status === 'pass') tone = 'success';
+            else if (currentDimensions.status === 'fail') tone = 'danger';
+            else if (currentDimensions.status === 'error') tone = 'warning';
+            else if (currentDimensions.status === 'measuring') tone = 'info';
+
+            if (dot) dot.className = `measure-status-dot ${tone}`;
+            if (statusText) {
+                statusText.innerText = currentDimensions.message || (
+                    currentDimensions.status === 'pass' ? 'DIMENSIONS IN SPEC'
+                    : currentDimensions.status === 'fail' ? 'DIMENSIONS OUT OF SPEC'
+                    : currentDimensions.status === 'error' ? 'MEASUREMENT ERROR'
+                    : 'WAITING FOR SIDE 3'
+                );
+            }
+        }
+
+        async function triggerSide3Calibration() {
+            try {
+                const payload = getGageBoxPayload();
+                const res = await fetch('/api/side3/calibration/capture', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.message || 'Failed to capture SIDE 3 calibration reference');
+                }
+                const scaleInfo = data.applied_scale_mm_per_pixel
+                    ? ` | scale ${Number(data.applied_scale_mm_per_pixel).toFixed(5)}`
+                    : '';
+                showToast(`Calibration captured: ${data.filename}${scaleInfo}`, 'success');
+            } catch (e) {
+                showToast(e.message || 'Failed to capture SIDE 3 calibration reference', 'danger');
+            }
+        }
+
+        async function toggleSide3CalibrationPreview() {
+            side3CalibrationPreviewEnabled = !side3CalibrationPreviewEnabled;
+            updateSide3CalibrationPreviewButton();
+            try {
+                await fetch('/api/side3/preview', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ enabled: side3CalibrationPreviewEnabled })
+                });
+            } catch (e) {
+                console.error('Failed to update SIDE 3 preview state', e);
+            }
+            showToast(
+                side3CalibrationPreviewEnabled
+                    ? 'SIDE 3 measurement preview enabled.'
+                    : 'SIDE 3 measurement preview disabled.',
+                'info'
+            );
+        }
+
+        async function startBurstCapture() {
+            const folder = document.getElementById('burst_folder').value;
+            const count = parseInt(document.getElementById('burst_count').value);
+            const delay = parseFloat(document.getElementById('burst_delay').value);
+            const btn = document.getElementById('btn_burst_start');
+            
+            if (!folder) { showToast("Please enter folder name", "danger"); return; }
+            
+            btn.disabled = true;
+            btn.innerText = "CAPTURING...";
+            showToast(`Starting Burst: ${count} images to /${folder}`, "info");
+
+            try {
+                const res = await fetch('/api/capture/burst', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ folder: folder, count: count, delay: delay })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Burst Complete! ${data.count} images saved.`, "success");
+                } else {
+                    showToast("Burst Failed: " + data.message, "danger");
+                }
+            } catch (e) { showToast("Network Error", "danger"); }
+            
+            btn.disabled = false;
+            btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> START BURST CAPTURE`;
+        }
+        
+        let currentPartId = 1;
+        let currentSide = 1;
+        let partResults = [];
+        let isPartComplete = false;
+        let completedPartResult = null;
+        let sideCaptureInProgress = false;
+        let latest_tm_label = "---";
+        let latest_tm_prob = 0;
+        let lastFrameData = null;
+        let bgCenterData = null; // Store background for center presence check
+        let bgCalibrationRetryUntil = 0;
+        let stillStartTime = null;
+        let side3PreviewStartTime = null;
+        let lastKnownCurrentSide = 1;
+        let side3AwaitingEmptyStation = false;
+        let side3AwaitingNewPart = false;
+        const SIDE3_ARM_STABLE_TIME = 3000;
+        const SIDE3_PREVIEW_TIME = 5000;
+
+        async function setSide3MeasurementArm(enabled) {
+            try {
+                await fetch('/api/inspection/side3_measurement_arm', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ enabled: !!enabled })
+                });
+            } catch (e) {
+                console.error('Failed to update SIDE 3 measurement arm state', e);
+            }
+        }
+
+        function syncSideState(nextSide) {
+            const normalizedSide = Number(nextSide) || 1;
+            if (normalizedSide !== lastKnownCurrentSide) {
+                stillStartTime = null;
+                side3PreviewStartTime = null;
+                side3CalibrationPreviewEnabled = false;
+                updateSide3CalibrationPreviewButton();
+                if (normalizedSide === 3) {
+                    side3AwaitingEmptyStation = true;
+                    side3AwaitingNewPart = false;
+                    setSide3MeasurementArm(false);
+                } else {
+                    side3AwaitingEmptyStation = false;
+                    side3AwaitingNewPart = false;
+                    setSide3MeasurementArm(false);
+                }
+                lastKnownCurrentSide = normalizedSide;
+            }
+            currentSide = normalizedSide;
+        }
+
+        function resetInspectionUIState() {
+            isSystemReady = false;
+            isPartComplete = false;
+            completedPartResult = null;
+            sideCaptureInProgress = false;
+            currentSide = 1;
+            lastKnownCurrentSide = 1;
+            side3AwaitingEmptyStation = false;
+            side3AwaitingNewPart = false;
+            side3PreviewStartTime = null;
+            side3CalibrationPreviewEnabled = false;
+            updateSide3CalibrationPreviewButton();
+            setSide3MeasurementArm(false);
+            partResults = [];
+            stillStartTime = null;
+            bgCalibrationRetryUntil = Date.now() + 5000;
+            updateSide3MeasurementUI({}, { forceClear: true });
+            updateInspectionUI();
+        }
+
+        async function startPartResetCountdown() {
+            let countdown = 5;
+            const timerDisp = document.getElementById('timer_text');
+            const debugDisp = document.getElementById('debug_info');
+
+            const resetInterval = setInterval(() => {
+                if (countdown > 0) {
+                    timerDisp.innerText = `RESET ${countdown}s`;
+                    debugDisp.innerText = "UI AUTO-CLEANING...";
+                    countdown--;
+                } else {
+                    clearInterval(resetInterval);
+                    setSystemReady(false);
+                    isSystemReady = false;
+                    completedPartResult = null;
+                    timerDisp.innerText = "STANDBY";
+                    debugDisp.innerText = "PRESS 'READY' TO SIGNAL ROBOT";
+                }
+            }, 1000);
+        }
+
+        async function initAI() {
+            try {
+                console.log("Loading Teachable Machine side classifier...");
+                models[0] = await tmImage.load(
+                    MODEL_BASE_URL + "side_classifier/model.json",
+                    MODEL_BASE_URL + "side_classifier/metadata.json"
+                );
+                console.log("TM side classifier loaded successfully");
+                predictLoop();
+            } catch (e) { 
+                console.error("AI Initialization Error:", e); 
+                showToast("Failed to load TM models.", "danger");
+            }
+        }
+
+        function setMode(mode) {
+            controlMode = mode;
+            document.getElementById('mode_auto').className = mode === 'auto' ? 'mode-opt active' : 'mode-opt';
+            document.getElementById('mode_manual').className = mode === 'manual' ? 'mode-opt active' : 'mode-opt';
+            updateInspectionUI();
+        }
+
+        async function setSystemReady(shouldTriggerModbus = true) {
+            if (shouldTriggerModbus) {
+                try {
+                    const res = await fetch('/api/inspection/reset', { method: 'POST' });
+                    const data = await res.json();
+                    if (!res.ok || !data.success) throw new Error(data.message || "Unable to reset inspection session");
+                } catch (e) {
+                    showToast(e.message || "Failed to prepare inspection session", "danger");
+                    return;
+                }
+            } else {
+                resetInspectionUIState();
+                showToast("UI Reset: Waiting for Manual Ready", "info");
+                return;
+            }
+
+            isSystemReady = true;
+            isPartComplete = false;
+            completedPartResult = null;
+            sideCaptureInProgress = false;
+            currentSide = 1;
+            partResults = [];
+            stillStartTime = null;
+            updateSide3MeasurementUI({}, { forceClear: true });
+            
+            // Capture Empty Background for Center Check
+            if (captureBackgroundReference()) {
+                console.log("[SYSTEM] Background Calibrated for Center Detection");
+            }
+            
+            if (shouldTriggerModbus) {
+                showToast("Handshake OK: Ready for Inspection", "success");
+                // Trigger Modbus Addr 0 (System Ready)
+                triggerModbus(0);
+            }
+            
+            updateInspectionUI();
+        }
+
+        async function cancelSystemReady() {
+            try {
+                const res = await fetch('/api/inspection/cancel', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok || !data.success) throw new Error(data.message || "Unable to cancel inspection session");
+
+                resetInspectionUIState();
+                bgCenterData = null;
+                document.getElementById('timer_text').innerText = "STANDBY";
+                document.getElementById('debug_info').innerText = "PRESS 'READY' TO SIGNAL ROBOT";
+                await fetchStatus();
+                showToast(data.message || "System Ready cancelled.", "info");
+            } catch (e) {
+                showToast(e.message || "Failed to cancel System Ready", "danger");
+                return;
+            }
+
+            updateInspectionUI();
+        }
+
+        async function predictLoop() {
+            if (!systemOn) { setTimeout(predictLoop, 500); return; }
+            
+            const img = document.getElementById('cam_feed_ai');
+            if (img.complete && img.naturalHeight !== 0) {
+                // Simplified Motion Check
+                motionCtx.drawImage(img, 0, 0, 64, 64);
+                const currentData = motionCtx.getImageData(0, 0, 64, 64).data;
+                let motionDiff = 0;
+                if (lastFrameData) {
+                    for (let i = 0; i < currentData.length; i += 16) {
+                        motionDiff += Math.abs(currentData[i] - lastFrameData[i]);
+                    }
+                }
+                const hasMotion = (motionDiff / 1024) > 15;
+                lastFrameData = currentData;
+
+                const debugDisp = document.getElementById('debug_info');
+                const timerDisp = document.getElementById('timer_text');
+
+                // --- Frontend AI: Teachable Machine (Good/NG) ---
+                const tmModel = models[0];
+                let tmBest = { className: "---", probability: 0 };
+                let tmSideResult = { side: 0, label: 'UNKNOWN', probability: 0 };
+                if (tmModel) {
+                    try {
+                        const prediction = await tmModel.predict(img);
+                        tmBest = prediction[0];
+                        for (let i = 1; i < prediction.length; i++) {
+                            if (prediction[i].probability > tmBest.probability) tmBest = prediction[i];
+                        }
+                        tmSideResult = getAggregatedTmSideResult(prediction);
+                    } catch(e) { console.error("TM Predict Error", e); }
+                }
+                latest_tm_label = tmSideResult.label;
+                latest_tm_prob = tmSideResult.probability;
+
+                if (!isSystemReady) {
+                    timerDisp.innerText = "STANDBY";
+                    debugDisp.innerText = "PRESS 'READY' TO START";
+                    updateAIUI("---", 0);
+                    setTimeout(predictLoop, 500);
+                    return;
+                }
+
+                if (!isPartComplete) {
+                    updateAIUI(getTmRealtimeLabel(tmBest.className), tmBest.probability);
+
+                    if (controlMode === 'auto') {
+                        // --- Object Presence Check ---
+                        let isObjectPresent = false;
+                        let avgDiff = 0;
+                        if (bgCenterData) {
+                            const currentCenter = motionCtx.getImageData(22, 22, 20, 20).data;
+                            let diff = 0;
+                            for (let i = 0; i < currentCenter.length; i += 4) {
+                                diff += Math.abs(currentCenter[i] - bgCenterData[i]);
+                                diff += Math.abs(currentCenter[i+1] - bgCenterData[i+1]);
+                                diff += Math.abs(currentCenter[i+2] - bgCenterData[i+2]);
+                            }
+                            avgDiff = diff / (20 * 20 * 3);
+                            isObjectPresent = avgDiff >= 15;
+                        } else {
+                            timerDisp.innerText = "CALIBRATING";
+                            debugDisp.innerText = "WAIT EMPTY STATION";
+                            stillStartTime = null;
+                            if (Date.now() <= bgCalibrationRetryUntil || latest_tm_prob < 0.45) {
+                                captureBackgroundReference();
+                            }
+                            setTimeout(predictLoop, 300);
+                            return;
+                        }
+
+                        if (currentSide === 3 && side3AwaitingEmptyStation) {
+                            stillStartTime = null;
+                            side3PreviewStartTime = null;
+                            if (isObjectPresent) {
+                                timerDisp.innerText = "CHANGE PART";
+                                debugDisp.innerText = "REMOVE SIDE 2 BEFORE SIDE 3";
+                            } else {
+                                side3AwaitingEmptyStation = false;
+                                side3AwaitingNewPart = true;
+                                setSide3MeasurementArm(false);
+                                timerDisp.innerText = "WAITING";
+                                debugDisp.innerText = "PLACE SIDE 3 PART";
+                            }
+                        } else if (currentSide === 3 && side3AwaitingNewPart) {
+                            if (!isObjectPresent) {
+                                timerDisp.innerText = "WAITING";
+                                debugDisp.innerText = "PLACE SIDE 3 PART";
+                                stillStartTime = null;
+                                side3PreviewStartTime = null;
+                                setSide3MeasurementArm(false);
+                            } else if (hasMotion) {
+                                timerDisp.innerText = "STILLING";
+                                debugDisp.innerText = "HOLD SIDE 3 STILL";
+                                stillStartTime = null;
+                                side3PreviewStartTime = null;
+                                setSide3MeasurementArm(false);
+                            } else {
+                                if (stillStartTime === null) stillStartTime = Date.now();
+                                const elapsed = Date.now() - stillStartTime;
+                                const remaining = Math.max(0, (SIDE3_ARM_STABLE_TIME - elapsed) / 1000).toFixed(1);
+                                if (elapsed < SIDE3_ARM_STABLE_TIME) {
+                                    timerDisp.innerText = `${remaining}s`;
+                                    debugDisp.innerText = "WAITING TO START SIDE 3 MEASUREMENT";
+                                } else {
+                                    side3AwaitingNewPart = false;
+                                    side3PreviewStartTime = Date.now();
+                                    setSide3MeasurementArm(true);
+                                    timerDisp.innerText = "PREVIEW";
+                                    debugDisp.innerText = "SHOWING SIDE 3 MEASUREMENT ON LIVE FEED";
+                                }
+                            }
+                        } else if (!isObjectPresent) {
+                            timerDisp.innerText = "WAITING";
+                            debugDisp.innerText = `PLACE OBJECT (Diff: ${avgDiff.toFixed(1)})`;
+                            stillStartTime = null;
+                            side3PreviewStartTime = null;
+                        } else {
+                            const detectedSide = tmSideResult.side;
+                            const prob = tmSideResult.probability;
+
+                            let canProcessCurrentSide = currentSide === 3
+                                ? true
+                                : detectedSide === currentSide && prob >= 0.70;
+                            const isWrongSide = currentSide === 3
+                                ? false
+                                : detectedSide !== 0
+                                    && detectedSide !== currentSide
+                                    && prob >= 0.75;
+
+                            if (isWrongSide) {
+                                timerDisp.innerText = "WRONG SIDE";
+                                debugDisp.innerText = `NEED SIDE ${currentSide}, BUT SAW SIDE ${detectedSide}`;
+                                stillStartTime = null;
+                                side3PreviewStartTime = null;
+                            } else if (canProcessCurrentSide) {
+                                if (currentSide === 3 && side3PreviewStartTime !== null) {
+                                    if (hasMotion) {
+                                        timerDisp.innerText = "STILLING";
+                                        debugDisp.innerText = "KEEP SIDE 3 STILL FOR LIVE FEED PREVIEW";
+                                        side3PreviewStartTime = Date.now();
+                                    } else {
+                                        const previewElapsed = Date.now() - side3PreviewStartTime;
+                                        const previewRemaining = Math.max(0, (SIDE3_PREVIEW_TIME - previewElapsed) / 1000).toFixed(1);
+                                        if (previewElapsed < SIDE3_PREVIEW_TIME) {
+                                            timerDisp.innerText = `PREVIEW ${previewRemaining}s`;
+                                            debugDisp.innerText = "LIVE FEED MEASUREMENT ACTIVE";
+                                        } else {
+                                            side3PreviewStartTime = null;
+                                            timerDisp.innerText = "INSPECTING";
+                                            debugDisp.innerText = "PROCESSING SIDE 3 WITH OPENCV...";
+                                            processInspection('MEASURE_3', 1);
+                                        }
+                                    }
+                                } else 
+                                if (hasMotion) {
+                                    timerDisp.innerText = "STILLING";
+                                    debugDisp.innerText = "WAITING FOR STABILITY";
+                                    stillStartTime = null;
+                                } else {
+                                    if (stillStartTime === null) stillStartTime = Date.now();
+                                    const elapsed = Date.now() - stillStartTime;
+                                    const STABILIZE_TIME = 5000;
+                                    const remaining = Math.max(0, (STABILIZE_TIME - elapsed) / 1000).toFixed(1);
+
+                                    if (elapsed < STABILIZE_TIME) {
+                                        timerDisp.innerText = `${remaining}s`;
+                                        debugDisp.innerText = currentSide === 3
+                                            ? 'READY! STAY STILL FOR OPENCV MEASUREMENT'
+                                            : `READY! STAY STILL (SIDE ${currentSide})`;
+                                    } else {
+                                        timerDisp.innerText = "INSPECTING";
+                                        debugDisp.innerText = currentSide === 3
+                                            ? 'PROCESSING SIDE 3 WITH OPENCV...'
+                                            : `PROCESSING SIDE ${currentSide}...`;
+                                        processInspection(currentSide === 3 ? 'MEASURE_3' : tmSideResult.label, currentSide === 3 ? 1 : prob);
+                                    }
+                                }
+                            } else {
+                                timerDisp.innerText = "IDLE";
+                                debugDisp.innerText = currentSide === 3
+                                    ? `SIDE 3 READY FOR OPENCV MEASUREMENT (Diff: ${avgDiff.toFixed(1)})`
+                                    : `WAITING FOR SIDE ${currentSide} (Diff: ${avgDiff.toFixed(1)})`;
+                                stillStartTime = null;
+                            }
+                        }
+                    } else {
+                        timerDisp.innerText = "READY";
+                        debugDisp.innerText = `SIDE ${currentSide} WAITING (MANUAL)`;
+                    }
+                } else {
+                    if (!timerDisp.innerText.startsWith("RESET")) {
+                        timerDisp.innerText = "DONE";
+                        debugDisp.innerText = "PREPARING NEXT PART...";
+                    }
+                    updateAIUI(getTmRealtimeLabel(tmBest.className), tmBest.probability);
+                }
+            }
+            setTimeout(predictLoop, 200);
+        }
+
+        function processInspection(label, prob) {
+            if (sideCaptureInProgress) return;
+            if (currentSide === 3) {
+                recordSide('MEASURE_3', 1);
+                return;
+            }
+            const upperLabel = label.toUpperCase();
+            let isCorrectSide = false;
+            if (currentSide === 1 && (upperLabel.includes('_1'))) isCorrectSide = true;
+            if (currentSide === 2 && (upperLabel.includes('_2'))) isCorrectSide = true;
+
+            if (isCorrectSide && prob >= 0.70) {
+                recordSide(label, prob);
+            }
+        }
+
+        async function recordSide(label, prob) {
+            if (sideCaptureInProgress) return;
+
+            const sideToSave = currentSide;
+            sideCaptureInProgress = true;
+
+            try {
+                const res = await fetch('/api/inspection/side', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        side: sideToSave,
+                        label: label,
+                        probability: prob
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) throw new Error(data.message || "Failed to save inspection side");
+
+                if (data.saved_label) {
+                    partResults = partResults.filter(r => r.side !== sideToSave);
+                    const resultEntry = {
+                        side: sideToSave,
+                        label: data.saved_label,
+                        confidence: (prob * 100).toFixed(0),
+                        defect: data.defect_label || '-'
+                    };
+                    if (data.dimensions) {
+                        resultEntry.dimensions = data.dimensions;
+                    }
+                    partResults.push(resultEntry);
+                }
+                if (data.dimensions) updateSide3MeasurementUI(data.dimensions);
+                else if (sideToSave === 3) updateSide3MeasurementUI({});
+
+                if (data.saved_label) {
+                    showToast(`Side ${sideToSave} Saved: ${data.saved_label}`, 'success');
+                }
+                if (sideToSave < 3) {
+                    triggerModbus(sideToSave);
+                }
+                stillStartTime = null;
+
+                if (data.part_complete) {
+                    isPartComplete = true;
+                    isSystemReady = false;
+                    completedPartResult = data.final_result || null;
+                    await saveFullPart();
+                    await startPartResetCountdown();
+                } else {
+                    syncSideState(data.next_side || (sideToSave + 1));
+                    await fetchStatus();
+                }
+            } catch (e) {
+                showToast(e.message || "Failed to save side", 'danger');
+            } finally {
+                sideCaptureInProgress = false;
+                updateInspectionUI();
+            }
+        }
+
+        function triggerModbus(addr) {
+            fetch('/api/modbus/trigger', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({addr: addr})
+            }).catch(e => console.error("Modbus error", e));
+        }
+
+        function manualInspect(side) {
+            if (!isSystemReady || side !== currentSide || isPartComplete) return;
+            if (sideCaptureInProgress) return;
+            if (side === 3) {
+                recordSide('MEASURE_3', 1);
+                return;
+            }
+            const label = latest_tm_label;
+            const prob = latest_tm_prob;
+            const upperLabel = label.toUpperCase();
+
+            let isCorrectSide = false;
+            if (currentSide === 1 && (upperLabel.includes('_1'))) isCorrectSide = true;
+            if (currentSide === 2 && (upperLabel.includes('_2'))) isCorrectSide = true;
+
+            if (isCorrectSide) {
+                recordSide(label, prob);
+            } else {
+                showToast(`MISMATCH: Need Side ${currentSide} but saw ${label}`, 'danger');
+                document.getElementById('timer_text').innerText = "ERROR";
+                document.getElementById('debug_info').innerText = `REJECTED: SAW ${label}`;
+            }
+        }
+
+        function updateInspectionUI() {
+            document.getElementById('display_part_id').innerText = currentPartId;
+            document.getElementById('btn_ready').disabled = (isSystemReady && !isPartComplete);
+            document.getElementById('btn_ready_cancel').disabled = (!isSystemReady && !sideCaptureInProgress);
+            
+            for (let i = 1; i <= 3; i++) {
+                const box = document.getElementById(`side_${i}_box`);
+                const status = document.getElementById(`side_${i}_status`);
+                const btn = document.getElementById(`btn_side_${i}`);
+                const res = partResults.find(r => r.side === i);
+                
+                box.className = 'step-item';
+                btn.style.display = (controlMode === 'manual') ? 'block' : 'none';
+                btn.disabled = (!isSystemReady || currentSide !== i || isPartComplete);
+                
+                if (res) {
+                    status.innerText = res.label;
+                    box.classList.add(res.label.toUpperCase().startsWith('GOOD') ? 'complete' : 'error');
+                } else if (isSystemReady && currentSide === i && !isPartComplete) {
+                    status.innerText = i === 3 ? 'WAITING FOR OPENCV' : 'WAITING FOR DATA';
+                    box.classList.add('active');
+                } else {
+                    status.innerText = 'PENDING';
+                }
+            }
+            const overall = document.getElementById('overall_status');
+            if (isPartComplete) {
+                const pass = completedPartResult
+                    ? completedPartResult === 'GOOD'
+                    : partResults.every(r => r.label.toUpperCase().startsWith('GOOD'));
+                overall.innerText = pass ? 'PASS' : 'FAIL';
+                overall.style.color = pass ? 'var(--success)' : 'var(--danger)';
+            } else {
+                overall.innerText = isSystemReady ? 'BUSY' : 'IDLE';
+                overall.style.color = isSystemReady ? 'var(--warning)' : 'var(--text-secondary)';
+            }
+        }
+
+        async function saveFullPart() { await fetchStatus(); }
+
+        function updateAIUI(label, prob) {
+            const rawLabel = String(label || '---').toUpperCase();
+            let displayLabel = label;
+            let displayProb = prob;
+            let displaySubtext = `${(displayProb * 100).toFixed(0)}% CONFIDENCE`;
+            const isSide3MeasureState = currentSide === 3;
+
+            // SIDE 3 is driven by OpenCV measurement, not TM classification.
+            // Hide TM's GOOD_3/NG_3 style labels from the realtime sensor to avoid false side-3 status.
+            if (isSide3MeasureState || rawLabel.includes('_3') || rawLabel.endsWith('3')) {
+                displayLabel = isSide3MeasureState ? 'MEASURING SIDE 3' : '---';
+                displayProb = isSide3MeasureState ? prob : 0;
+                displaySubtext = isSide3MeasureState ? 'OPENCV MEASUREMENT ACTIVE' : '0% CONFIDENCE';
+            }
+
+            const p = (displayProb * 100).toFixed(0);
+            document.getElementById('ai_label_sidebar').innerText = displayLabel;
+            document.getElementById('ai_prob_sidebar').innerText = displaySubtext;
+            const overlay = document.getElementById('ai_overlay');
+            const overlayLabel = document.getElementById('ai_overlay_label');
+            const overlayProb = document.getElementById('ai_overlay_prob');
+            overlayLabel.innerText = displayLabel; overlayProb.innerText = isSide3MeasureState || rawLabel.includes('_3') || rawLabel.endsWith('3') ? 'MEASURING' : `${p}%`;
+            overlay.classList.remove('good', 'ng', 'visible');
+            if (displayProb > 0.80 && displayLabel !== '---') {
+                overlay.classList.add('visible');
+                const upperDisplay = String(displayLabel).toUpperCase();
+                if (upperDisplay.startsWith('GOOD')) overlay.classList.add('good');
+                else if (upperDisplay.startsWith('NG')) overlay.classList.add('ng');
+            }
+        }
+
+        function formatTime(minutes) {
+            if (!minutes || minutes <= 0) return "--:--:--";
+            const h = Math.floor(minutes / 60);
+            const m = Math.floor(minutes % 60);
+            const s = Math.floor((minutes * 60) % 60);
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function drawOBB(points, label, prob) {
+            const canvas = document.getElementById('ai_canvas');
+            const ctx = canvas.getContext('2d');
+            const img = document.getElementById('cam_feed');
+            
+            // Sync canvas size with displayed image size
+            canvas.width = img.clientWidth;
+            canvas.height = img.clientHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!points || points.length === 0) return;
+            
+            // Scalers (Assume model was 1920x1080)
+            const sx = canvas.width / 1920;
+            const sy = canvas.height / 1080;
+            
+            ctx.strokeStyle = '#f43f5e'; // Red for defect
+            ctx.lineWidth = 3;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(points[0][0] * sx, points[0][1] * sy);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i][0] * sx, points[i][1] * sy);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            
+            // Label background
+            ctx.fillStyle = 'rgba(244, 63, 94, 0.8)';
+            const text = `${label} (${(prob*100).toFixed(0)}%)`;
+            const textWidth = ctx.measureText(text).width;
+            ctx.fillRect(points[0][0] * sx, (points[0][1] * sy) - 25, textWidth + 10, 20);
+
+            // Label text
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 12px Inter';
+            ctx.fillText(text, (points[0][0] * sx) + 5, (points[0][1] * sy) - 10);
+        }
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/get_status');
+                const data = await res.json();
+                systemOn = data.system_on;
+                
+                // แก้ไขปัญหา #NaN: ตรวจสอบว่ามีข้อมูลจาก Server หรือไม่
+                if (data.total_parts_inspected !== undefined) {
+                    currentPartId = data.total_parts_inspected + 1;
+                }
+                if (data.inspection_state) {
+                    const state = data.inspection_state;
+                    if (state.inspection_active) {
+                        isSystemReady = true;
+                        isPartComplete = false;
+                        syncSideState(state.current_side || 1);
+                        if (state.part_id) currentPartId = state.part_id;
+                    } else if (!state.inspection_active && !isPartComplete) {
+                        isSystemReady = false;
+                        syncSideState(state.current_side || 1);
+                    }
+                }
+                
+                document.getElementById('status_dot').className = systemOn ? 'status-indicator active' : 'status-indicator';
+                document.getElementById('system_status').innerText = systemOn ? 'SYSTEM ACTIVE' : 'SYSTEM STANDBY';
+                
+                // Toggle System Off Overlay
+                const offOverlay = document.getElementById('system_off_overlay');
+                const camFeed = document.getElementById('cam_feed');
+                if (!systemOn) {
+                    offOverlay.classList.add('visible');
+                    camFeed.style.opacity = '0';
+                    setTimeout(() => { if(!systemOn) camFeed.style.visibility = 'hidden'; }, 600);
+                } else {
+                    camFeed.style.visibility = 'visible';
+                    camFeed.style.opacity = '1';
+                    offOverlay.classList.remove('visible');
+                }
+                
+                // Update IP and Modbus Info
+                if (data.server_ip) document.getElementById('display_server_ip').innerText = data.server_ip;
+                if (data.backup_ip) {
+                    document.getElementById('display_backup_ip').innerText = data.backup_ip;
+                    document.getElementById('backup_ip_container').style.display = 'inline';
+                } else {
+                    document.getElementById('backup_ip_container').style.display = 'none';
+                }
+                if (data.modbus_port) document.getElementById('display_modbus_info').innerText = `PORT ${data.modbus_port}`;
+
+                // Update Server AI Status (YOLO OBB)
+                if (data.ai_results) {
+                    latest_ai_label = data.ai_results.label;
+                    latest_ai_prob = data.ai_results.prob;
+                    const canvas = document.getElementById('ai_canvas');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+
+                // Update Pi System Stats
+                if (data.pi_stats) {
+                    const ps = data.pi_stats;
+                    document.getElementById('pi_cpu_usage').innerText = ps.cpu_usage;
+                    document.getElementById('pi_cpu_temp').innerText = ps.cpu_temp;
+                    document.getElementById('pi_ram_usage').innerText = ps.ram_usage;
+                    document.getElementById('pi_disk_usage').innerText = ps.disk_usage;
+                }
+                if (data.camera_focus) {
+                    loadCameraFocusSettings(data.camera_focus);
+                }
+                if (data.current_dimensions) {
+                    updateSide3MeasurementUI(data.current_dimensions);
+                }
+
+                // Update Printer Info
+                if (data.printer) {
+                    const ps = data.printer;
+                    const badge = document.getElementById('printer_status_badge');
+                    const indicator = document.getElementById('printing_indicator');
+                    const card = document.getElementById('printer_card');
+                    const ipInput = document.getElementById('printer_ip_input');
+                    const ipHint = document.getElementById('printer_ip_hint');
+                    const accessCodeInput = document.getElementById('printer_access_code_input');
+                    const serialNoInput = document.getElementById('printer_serial_no_input');
+                    if (ipInput && !ipInput.value && ps.ip) ipInput.value = ps.ip;
+                    if (accessCodeInput && !ps.pairing_configured) accessCodeInput.placeholder = 'Access Code (required)';
+                    if (serialNoInput && !ps.pairing_configured) serialNoInput.placeholder = 'Serial No (required)';
+                    if (ipHint) {
+                        if (ps.pairing_configured) {
+                            ipHint.innerText = 'You can update Printer IP only, or enter a new ACCESS_CODE when the printer pairing code changes.';
+                            ipHint.style.color = 'var(--text-secondary)';
+                        } else {
+                            ipHint.innerText = 'First-time setup needs Printer IP, ACCESS_CODE, and SERIAL_NO before 3D monitor can connect.';
+                            ipHint.style.color = 'var(--warning)';
+                        }
+                    }
+                    
+                    const isPrinting = (ps.status === 'RUNNING' || ps.status === 'FINISHING' || (ps.percent > 0 && ps.percent < 100));
+                    
+                    badge.innerText = ps.status.toUpperCase();
+                    if (ps.status === 'RUNNING' || ps.status === 'FINISH' || ps.status === 'Connected') {
+                        badge.className = 'badge badge-pass';
+                    } else {
+                        badge.className = 'badge badge-fail';
+                    }
+                    
+                    // Show/Hide Printing Indicator
+                    indicator.style.display = isPrinting ? 'flex' : 'none';
+                    if (isPrinting) {
+                        card.style.borderColor = 'var(--success)';
+                        card.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.1)';
+                    } else {
+                        card.style.borderColor = 'var(--border)';
+                        card.style.boxShadow = 'none';
+                    }
+                    
+                    document.getElementById('nozzle_temp').innerText = ps.nozzle_temp || 0;
+                    document.getElementById('bed_temp').innerText = ps.bed_temp || 0;
+                    document.getElementById('print_percent').innerText = `${ps.percent || 0}%`;
+                    document.getElementById('print_progress_bar').style.width = `${ps.percent || 0}%`;
+                    
+                    // Update Task Name
+                    if (ps.task_name && ps.task_name !== "Unknown") {
+                        document.getElementById('printer_task_name').innerText = ps.task_name;
+                    } else if (ps.status === 'Connected') {
+                        document.getElementById('printer_task_name').innerText = "Ready to Print";
+                    } else {
+                        document.getElementById('printer_task_name').innerText = "Printer Offline";
+                    }
+
+                    // Update Remaining Time and Stage
+                    document.getElementById('printer_remaining_time').innerText = formatTime(ps.remaining_time);
+                    document.getElementById('printer_sub_stage').innerText = ps.sub_stage || "N/A";
+
+                    if (!autoPrinterReconnectDone && ps.ip && ['Disconnected', 'Conn Error', 'Stale', 'Connecting', 'Config Missing'].includes(ps.status)) {
+                        autoPrinterReconnectDone = true;
+                        refreshPrinterData(true);
+                    }
+                }
+
+                // Update Robot Info
+                if (data.robot_status) {
+                    const rStatus = data.robot_status;
+                    const rBadge = document.getElementById('robot_status_badge');
+                    const rDot = document.getElementById('robot_status_dot');
+                    
+                    rBadge.innerText = rStatus.toUpperCase();
+                    if (rStatus === 'Connected') {
+                        rBadge.className = 'badge badge-pass';
+                        rDot.style.background = 'var(--success)';
+                        rDot.style.boxShadow = '0 0 10px var(--success)';
+                    } else {
+                        rBadge.className = 'badge badge-fail';
+                        rDot.style.background = 'var(--danger)';
+                        rDot.style.boxShadow = 'none';
+                    }
+                }
+
+                updateHistoryUI(data.inspection_history);
+                updateModbusLogUI(data.modbus_log);
+                updateInspectionUI();
+                const btn = document.getElementById('btn_system');
+                btn.innerText = systemOn ? 'SYSTEM OFF' : 'SYSTEM ON';
+                btn.style.color = systemOn ? 'var(--danger)' : 'var(--success)';
+                btn.style.borderColor = systemOn ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)';
+            } catch(e) {}
+        }
+
+        async function savePrinterConfig() {
+            const ip = document.getElementById('printer_ip_input').value.trim();
+            const accessCode = document.getElementById('printer_access_code_input').value.trim();
+            const serialNo = document.getElementById('printer_serial_no_input').value.trim();
+            if (!ip) return;
+            try {
+                const res = await fetch('/api/printer/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        ip: ip,
+                        access_code: accessCode,
+                        serial_no: serialNo
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('printer_access_code_input').value = '';
+                    showToast(data.message, 'success');
+                } else {
+                    showToast(data.message, 'danger');
+                }
+            } catch(e) { showToast("Failed to save printer config", "danger"); }
+        }
+
+        async function saveCameraFocus() {
+            const input = document.getElementById('lens_position_input');
+            if (!input || cameraFocusInFlight) return;
+            const lensPosition = input.value.trim();
+            if (!lensPosition) {
+                setFocusStatus('Enter a lens position first.', 'warning');
+                return;
+            }
+            cameraFocusInFlight = true;
+            loadCameraFocusSettings({ lens_position: lensPosition });
+            setFocusStatus('Applying lens position and restarting camera...', 'info');
+            try {
+                const res = await fetch('/api/camera/focus', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ lens_position: lensPosition })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) throw new Error(data.message || 'Failed to apply camera focus');
+                loadCameraFocusSettings(data.camera_focus || { lens_position: lensPosition });
+                showToast(data.message || 'Camera focus updated.', 'success');
+            } catch (e) {
+                setFocusStatus(e.message || 'Failed to apply focus', 'danger');
+                showToast(e.message || 'Failed to apply focus', 'danger');
+            } finally {
+                cameraFocusInFlight = false;
+                loadCameraFocusSettings({});
+            }
+        }
+
+        async function refreshPrinterData(silent=false) {
+            try {
+                const res = await fetch('/api/printer/refresh', { method: 'POST' });
+                const data = await res.json();
+                if (!silent) {
+                    if (data.success) showToast("Requesting full status update...", "success");
+                    else showToast(data.message, "danger");
+                }
+            } catch(e) {
+                if (!silent) showToast("Failed to connect to server", "danger");
+            }
+        }
+
+        function updateModbusLogUI(logs) {
+            const list = document.getElementById('modbus_log_list');
+            if (!logs || logs.length === 0) { list.innerHTML = 'Waiting for signals...'; return; }
+            list.innerHTML = logs.slice().reverse().map(log => `
+                <div style="margin-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px; font-size: 0.55rem;">
+                    <span style="color: var(--text-secondary);">[${log.timestamp}]</span>
+                    <span style="color: var(--accent);">SIGNAL -> Addr ${log.addr}</span>
+                    <span style="float: right; color: var(--success); font-weight: 700;">${log.status}</span>
+                </div>
+            `).join('');
+        }
+
+        function updateHistoryUI(history) {
+            const list = document.getElementById('history_list');
+            if (!history || history.length === 0) { list.innerHTML = '<div style="text-align:center;font-size:0.7rem;opacity:0.5;padding:1rem;">No history available</div>'; return; }
+            list.innerHTML = history.slice().reverse().map(item => `
+                <div class="history-card">
+                    <div class="history-header">
+                        <span style="font-weight:800; font-size:0.7rem;">PART #${item.part_id}</span>
+                        <span class="badge ${item.status === 'GOOD' ? 'badge-pass' : 'badge-fail'}">${item.status}</span>
+                    </div>
+                    <div style="font-size:0.62rem; color:var(--text-secondary); line-height:1.5;">
+                        S1: ${item.side1 || '-'} | D1: ${item.defect_s1 || '-'}<br>
+                        S2: ${item.side2 || '-'} | D2: ${item.defect_s2 || '-'}<br>
+                        S3: ${item.side3 || '-'} | D3: ${item.defect_s3 || '-'}
+                    </div>
+                    <div style="font-size:0.58rem; color:var(--accent-light); line-height:1.5; margin-top:4px;">
+                        TOP: ${item.dimension_top !== null && item.dimension_top !== undefined ? Number(item.dimension_top).toFixed(2) + ' mm' : '-'} |
+                        BOTTOM: ${item.dimension_bottom !== null && item.dimension_bottom !== undefined ? Number(item.dimension_bottom).toFixed(2) + ' mm' : '-'} |
+                        LENGTH: ${item.dimension_length !== null && item.dimension_length !== undefined ? Number(item.dimension_length).toFixed(2) + ' mm' : '-'}
+                    </div>
+                    <div style="font-size:0.55rem; text-align:right; opacity:0.4; margin-top:4px;">${item.timestamp}</div>
+                </div>
+            `).join('');
+        }
+
+        function showToast(msg, type='info') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.style.borderLeftColor = type === 'success' ? 'var(--success)' : type === 'danger' ? 'var(--danger)' : 'var(--accent)';
+            t.innerText = msg;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        function triggerRefocus() { fetch('/refocus', {method:'POST'}); }
+        function toggleSystem() { fetch('/toggle_system', {method:'POST'}).then(fetchStatus); }
+        function clearHistory() { if(confirm("Clear inspection log?")) fetch('/api/clear_history', {method:'POST'}).then(fetchStatus); }
+        function forceRestart() { if(confirm("Hard restart server?")) fetch('/restart', {method:'POST'}).then(() => setTimeout(() => location.reload(), 3000)); }
+
+        const motionCanvas = document.createElement('canvas');
+        motionCanvas.width = 64; motionCanvas.height = 64;
+        const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
+
+        function updateDateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+            if(document.getElementById('display_time')) document.getElementById('display_time').innerText = timeStr;
+            if(document.getElementById('display_date')) document.getElementById('display_date').innerText = dateStr;
+        }
+
+        window.onload = () => { 
+            updateSide3CalibrationPreviewButton();
+            fetchStatus(); 
+            setInterval(fetchStatus, 3000); 
+            setInterval(updateDateTime, 1000);
+            updateDateTime();
+            setTimeout(() => refreshPrinterData(true), 1200);
+            initAI(); 
+        }
+    </script>
+</body>
+</html>

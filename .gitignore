@@ -1,0 +1,49 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+myenv/
+
+# Runtime output
+logs/
+captures/
+tmp/
+*.log
+app_runtime.log
+streamlit.log
+
+# Local configuration and secrets
+config.json
+.streamlit/secrets.toml
+.env
+.env.*
+
+# Model and archive assets
+*.pt
+best_openvino_model/
+archives/
+*.zip
+
+# Generated static assets
+static/*.jpg
+static/*.jpeg
+static/*.png
+static/*.webp
+!static/tme-logo.png
+static/model/
+static/thumbnails/
+
+# Local calibration and Supabase CLI state
+calibration/*.jpg
+calibration/*.jpeg
+calibration/*.png
+supabase/.temp/
+
+# Local debug scripts may contain machine-specific pairing data
+tools/debug/
+
+# OS files
+.DS_Store
